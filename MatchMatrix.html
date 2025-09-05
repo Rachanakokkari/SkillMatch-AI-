@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Resume Analyzer</title>
+<style>
+/* Global Styles */
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg,#667eea,#764ba2);
+  margin: 0; padding: 0;
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh;
+}
+.hidden { display: none; }
+.container {
+  width: 90%; max-width: 800px;
+  background: #fff; border-radius: 20px; padding: 20px;
+  box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+}
+/* Login Page */
+.login-box { text-align: center; }
+.login-box h1 { margin-bottom: 25px; }
+.form-group { margin-bottom: 20px; text-align: left; }
+.form-label { display:block; margin-bottom:5px; font-weight:600; }
+.form-control {
+  width:100%; padding:12px; border-radius:10px;
+  border:2px solid #e0e0e0; font-size:1em;
+}
+.btn {
+  background: linear-gradient(135deg,#ff6b6b,#4ecdc4);
+  color:white; border:none; padding:12px 25px; border-radius:25px;
+  font-size:1.1em; cursor:pointer; transition:0.3s; width:100%;
+}
+.btn:hover { transform:translateY(-2px); }
+.error-msg { color:#dc3545; margin-bottom:15px; display:none; }
+
+/* Analyzer Styles */
+#app h1 { text-align: center; margin-bottom: 20px; }
+.upload-area {
+  border: 2px dashed #aaa; padding: 20px; text-align: center;
+  border-radius: 10px; background: #f9f9f9; cursor: pointer;
+}
+.file-item { margin-top: 10px; }
+.results-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+.results-table th, .results-table td {
+  border: 1px solid #ddd; padding: 8px; text-align: center;
+}
+.results-table th { background: #f0f0f0; }
+.skill-tag {
+  background: #e0f7fa; border-radius: 5px; padding: 3px 8px;
+  margin: 2px; display: inline-block; font-size: 0.9em;
+}
+.score-badge { padding: 5px 10px; border-radius: 10px; color:white; }
+.score-excellent { background: #4caf50; }
+.score-good { background: #2196f3; }
+.score-fair { background: #ff9800; }
+.score-poor { background: #f44336; }
+#loading { margin-top: 20px; text-align: center; }
+.progress { background:#ddd; height:10px; border-radius:5px; overflow:hidden; margin-top:10px; }
+.progress-fill { background:#4ecdc4; width:0%; height:100%; transition:width 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage" class="container">
+  <div class="login-box">
+    <h1>🔐 Login</h1>
+    <div class="error-msg" id="errorMsg">Invalid email or password</div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" id="email" class="form-control" placeholder="Enter your email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" id="password" class="form-control" placeholder="Enter your password">
+    </div>
+    <button class="btn" onclick="login()">Login</button>
+  </div>
+</div>
+
+<!-- RESUME ANALYZER PAGE -->
+<div id="app" class="container hidden">
+  <h1>🚀 AI Resume Analyzer</h1>
+  <button class="btn" style="background:#f44336;margin-bottom:10px;" onclick="logout()">Logout</button>
+  <div class="upload-area" id="uploadArea">
+    <p>📂 Drag & Drop Resumes or Click to Upload</p>
+    <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt" hidden>
+  </div>
+  <div id="fileList"></div>
+  <textarea id="jobDescription" rows="4" placeholder="Enter job description..." style="width:100%;margin-top:15px;"></textarea>
+  <div id="charCount" style="text-align:right;font-size:0.9em;">0/1000</div>
+  <button class="btn" onclick="analyzeResumes()">Analyze</button>
+  <button class="btn" style="margin-top:10px;background:#f44336;" onclick="clearAll()">Clear All</button>
+  
+  <div id="loading" class="hidden">
+    <p>⏳ Analyzing resumes...</p>
+    <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+  
+  <div id="resultsSection" class="hidden">
+    <h2>📊 Analysis Results</h2>
+    <table class="results-table" id="resultsTable">
+      <thead>
+        <tr>
+          <th>Candidate Name</th>
+          <th>Skills Extracted</th>
+          <th>Experience</th>
+          <th>Match %</th>
+          <th>Overall Score</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- LIBRARIES -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+
+<script>
+/* LOGIN WITH SESSION STORAGE */
+const demoEmail = "admin@example.com";
+const demoPassword = "password123";
+
+window.onload = () => {
+  if(localStorage.getItem("loggedIn") === "true"){
+    showApp();
+  }
+};
+
+function login() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const errorMsg = document.getElementById('errorMsg');
+  if(email === demoEmail && password === demoPassword){
+    localStorage.setItem("loggedIn", "true");
+    errorMsg.style.display = 'none';
+    showApp();
+  } else {
+    errorMsg.style.display = 'block';
+  }
+}
+
+function logout() {
+  localStorage.removeItem("loggedIn");
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginPage').classList.remove('hidden');
+}
+
+function showApp(){
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+}
+
+/* RESUME ANALYZER LOGIC */
+let uploadedFiles = [];
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const loading = document.getElementById('loading');
+const progressFill = document.getElementById('progressFill');
+const resultsSection = document.getElementById('resultsSection');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', handleFiles);
+uploadArea.addEventListener('dragover', e => {e.preventDefault(); uploadArea.style.background='#f0f0f0';});
+uploadArea.addEventListener('dragleave', e => {uploadArea.style.background='#f9f9f9';});
+uploadArea.addEventListener('drop', e => {e.preventDefault(); handleFiles({target:{files:e.dataTransfer.files}}); uploadArea.style.background='#f9f9f9';});
+
+function handleFiles(e) {
+  for(let file of e.target.files){
+    uploadedFiles.push(file);
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `${file.name} <button onclick="removeFile('${file.name}')">❌</button>`;
+    fileList.appendChild(div);
+  }
+}
+function removeFile(name){
+  uploadedFiles = uploadedFiles.filter(f => f.name !== name);
+  fileList.innerHTML = '';
+  uploadedFiles.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `${f.name} <button onclick="removeFile('${f.name}')">❌</button>`;
+    fileList.appendChild(div);
+  });
+}
+function clearAll(){
+  uploadedFiles = [];
+  fileList.innerHTML = '';
+  resultsSection.classList.add('hidden');
+}
+
+document.getElementById('jobDescription').addEventListener('input', function(){
+  document.getElementById('charCount').innerText = `${this.value.length}/1000`;
+});
+
+async function extractSkillsFromFile(file){
+  let textContent = '';
+  if(file.name.endsWith('.pdf')){
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+    for(let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      textContent += ' '+content.items.map(item=>item.str).join(' ');
+    }
+  } else if(file.name.endsWith('.docx')){
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({arrayBuffer});
+    textContent = result.value;
+  } else {
+    textContent = await file.text();
+  }
+
+  const allSkills = ['Python','Java','C++','JavaScript','React','Node.js','SQL','AWS','Docker','HTML','CSS','Machine Learning','Data Analysis','Excel','Communication','Leadership'];
+  const skillsFound = allSkills.filter(skill => textContent.toLowerCase().includes(skill.toLowerCase()));
+  return skillsFound.length > 0 ? skillsFound : ['No skills found'];
+}
+
+async function analyzeResumes(){
+  if(uploadedFiles.length===0){alert('Please upload at least one resume');return;}
+  const jobDescription = document.getElementById('jobDescription').value.trim();
+  if(!jobDescription){alert('Please enter job description');return;}
+  resultsSection.classList.add('hidden');
+  loading.classList.remove('hidden');
+  progressFill.style.width = '0%';
+
+  const results = [];
+  for(let i=0;i<uploadedFiles.length;i++){
+    const file = uploadedFiles[i];
+    const name = file.name.replace(/\.(pdf|docx|txt)$/i,'');
+    const skills = await extractSkillsFromFile(file);
+    const experience = `${Math.floor(Math.random()*12)+1} years`;
+    const jobKeywords = jobDescription.split(/\s+/).filter(w=>w.length>2);
+    const matchedSkills = skills.filter(skill => jobKeywords.some(k=>skill.toLowerCase().includes(k.toLowerCase())));
+    const matchPercentage = Math.min(100, Math.max(30, Math.round((matchedSkills.length/skills.length)*100)));
+    const experienceYears = parseInt(experience);
+    const experienceBonus = Math.min(20, experienceYears*2);
+    const score = Math.min(100, Math.round(matchPercentage*0.8+experienceBonus));
+    results.push({name, skills, experience, score, match:matchPercentage});
+    progressFill.style.width = `${Math.round(((i+1)/uploadedFiles.length)*100)}%`;
+  }
+
+  loading.classList.add('hidden');
+  displayResults(results);
+}
+
+function displayResults(results){
+  resultsSection.classList.remove('hidden');
+  const tbody = document.querySelector('#resultsTable tbody');
+  tbody.innerHTML = '';
+  results.sort((a,b)=>b.score-a.score).forEach(res=>{
+    const tr = document.createElement('tr');
+    const skillsHTML = res.skills.map(s=>`<span class="skill-tag">${s}</span>`).join(' ');
+    let badgeClass='score-fair';
+    if(res.score>=80) badgeClass='score-excellent';
+    else if(res.score>=60) badgeClass='score-good';
+    else if(res.score>=40) badgeClass='score-fair';
+    else badgeClass='score-poor';
+    tr.innerHTML = `<td>${res.name}</td><td>${skillsHTML}</td><td>${res.experience}</td><td>${res.match}%</td><td><span class="score-badge ${badgeClass}">${res.score}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
